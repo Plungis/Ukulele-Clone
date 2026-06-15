@@ -1,7 +1,7 @@
 services:
   ukulele:
     container_name: ukulele
-    image: ghcr.io/freyacodes/ukulele:main
+    image: ghcr.io/plungis/ukulele-clone:main
     environment:
       CONFIG_DATABASE: ./db/database # Database location overwrite so mounting works
     volumes:
