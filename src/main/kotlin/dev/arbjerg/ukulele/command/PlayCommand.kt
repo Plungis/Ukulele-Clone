@@ -7,6 +7,7 @@ import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack
 import dev.arbjerg.ukulele.audio.Player
 import dev.arbjerg.ukulele.audio.PlayerRegistry
+import dev.arbjerg.ukulele.audio.SpotifyUrlResolver
 import dev.arbjerg.ukulele.config.BotProps
 import dev.arbjerg.ukulele.features.HelpContext
 import dev.arbjerg.ukulele.jda.Command
@@ -18,7 +19,8 @@ import org.springframework.stereotype.Component
 class PlayCommand(
         val players: PlayerRegistry,
         val apm: AudioPlayerManager,
-        val botProps: BotProps
+        val botProps: BotProps,
+        val spotifyUrlResolver: SpotifyUrlResolver
 ) : Command("play", "p") {
     override suspend fun CommandContext.invoke() {
         if (!ensureVoiceChannel()) return
@@ -64,7 +66,8 @@ class PlayCommand(
     inner class Loader(
             private val ctx: CommandContext,
             private val player: Player,
-            private val identifier: String
+            private val identifier: String,
+            private val allowSpotifyFallback: Boolean = true
     ) : AudioLoadResultHandler {
         override fun trackLoaded(track: AudioTrack) {
             if (track.isOverDurationLimit) {
@@ -100,11 +103,30 @@ class PlayCommand(
         }
 
         override fun noMatches() {
+            if (trySpotifyFallback()) return
             ctx.reply("Nothing found for \"$identifier\"")
         }
 
         override fun loadFailed(exception: FriendlyException) {
+            if (trySpotifyFallback()) return
             ctx.handleException(exception)
+        }
+
+        private fun trySpotifyFallback(): Boolean {
+            if (!allowSpotifyFallback || !spotifyUrlResolver.isSpotifyUrl(identifier)) return false
+
+            val fallbackIdentifier = spotifyUrlResolver.resolveTrackSearch(identifier)
+            if (fallbackIdentifier == null) {
+                ctx.reply(
+                    "I couldn't resolve that Spotify link. Track links can usually be mirrored to YouTube, " +
+                            "but albums and playlists need Spotify API credentials in `ukulele.yml`."
+                )
+                return true
+            }
+
+            ctx.reply("Spotify lookup had trouble, so I am matching it on YouTube instead.")
+            apm.loadItem(fallbackIdentifier, Loader(ctx, player, fallbackIdentifier, allowSpotifyFallback = false))
+            return true
         }
 
         private val AudioTrack.isOverDurationLimit: Boolean
