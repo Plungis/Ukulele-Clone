@@ -50,6 +50,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
     }
     private var inactivityDisconnect: ScheduledFuture<*>? = null
     private var emptyChannelDisconnect: ScheduledFuture<*>? = null
+    private var controlsRefresh: ScheduledFuture<*>? = null
     private var currentTrackStartedAt: Long? = null
     private var currentTrackPlayedMillis: Long = 0
     private var sessionPlayedMillis: Long = 0
@@ -133,6 +134,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
     fun pause() {
         pauseElapsedTimer()
         player.isPaused = true
+        controlsRefresh?.cancel(false)
         scheduleInactivityDisconnect()
         showOrUpdateControls()
     }
@@ -141,6 +143,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         player.isPaused = false
         currentTrackStartedAt = System.currentTimeMillis()
         markActive()
+        scheduleControlsRefresh()
         showOrUpdateControls()
     }
 
@@ -213,6 +216,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         currentTrackStartedAt = System.currentTimeMillis()
         currentTrackPlayedMillis = 0
         markActive()
+        scheduleControlsRefresh()
         showOrUpdateControls()
         if (beans.botProps.announceTracks) {
             lastChannel?.sendMessage(beans.nowPlayingCommand.buildMessage(track, player.isPaused))?.queue()
@@ -220,6 +224,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
     }
 
     override fun onTrackEnd(player: AudioPlayer, track: AudioTrack, endReason: AudioTrackEndReason) {
+        controlsRefresh?.cancel(false)
         recordPlayed(track)
         if (isRepeating && endReason.mayStartNext) {
             queue.add(track.makeClone())
@@ -282,6 +287,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         currentTrackPlayedMillis = 0
         inactivityDisconnect?.cancel(false)
         emptyChannelDisconnect?.cancel(false)
+        controlsRefresh?.cancel(false)
         if (guild.audioManager.isConnected) {
             guild.audioManager.closeAudioConnection()
             log.info("Disconnected player for guild {}: {}", guildId, reason)
@@ -294,6 +300,18 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
             controlsMessageId = sent.idLong
             controlsChannel = sent.channel.asTextChannel()
         }
+    }
+
+    private fun scheduleControlsRefresh() {
+        controlsRefresh?.cancel(false)
+        controlsRefresh = scheduler.scheduleAtFixedRate({
+            if (player.playingTrack == null || player.isPaused) {
+                controlsRefresh?.cancel(false)
+                return@scheduleAtFixedRate
+            }
+
+            showOrUpdateControls()
+        }, PANEL_REFRESH_SECONDS, PANEL_REFRESH_SECONDS, TimeUnit.SECONDS)
     }
 
     private fun listenersInConnectedChannel(): Int {
@@ -334,5 +352,6 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
 
     private companion object {
         const val MAX_HISTORY = 25
+        const val PANEL_REFRESH_SECONDS = 5L
     }
 }
