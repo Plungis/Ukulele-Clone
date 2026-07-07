@@ -10,7 +10,11 @@ The bot is self-contained and only requires Java 25 to run. This bot uses some o
 > Testing has been minimal and part of it might be broken. 
 
 ## Features
-- Basic player commands (::play, ::list, ::skip, ::shuffle)
+- Prefix and slash commands (`::play` or `/play`, `/queue`, `/skip`, `/shuffle`)
+- Premium player controls with buttons and a menu (`/controls`)
+- YouTube URLs, YouTube search, and Spotify URL resolving through YouTube mirroring
+- Recently played history and session play-time tracking
+- Automatic voice disconnect after inactivity or when the voice channel is empty
 - Volume command
 - Zero-maintenance embedded database
 

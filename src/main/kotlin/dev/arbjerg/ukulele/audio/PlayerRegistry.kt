@@ -9,6 +9,8 @@ class PlayerRegistry(val playerBeans: Player.Beans) {
 
     private val players = mutableMapOf<Long, Player>()
 
-    fun get(guild: Guild, guildProperties: GuildProperties) = players.computeIfAbsent(guild.idLong) { Player(playerBeans, guildProperties) }
+    fun get(guild: Guild, guildProperties: GuildProperties) = players.computeIfAbsent(guild.idLong) { Player(playerBeans, guild, guildProperties) }
+
+    fun find(guildId: Long) = players[guildId]
 
 }

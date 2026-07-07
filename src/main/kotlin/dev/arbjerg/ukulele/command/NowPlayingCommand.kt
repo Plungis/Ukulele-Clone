@@ -24,26 +24,34 @@ class NowPlayingCommand : Command ("nowplaying", "np") {
         if (player.tracks.isEmpty())
             return reply("Not playing anything.")
 
-        replyMsg(buildMessage(player.tracks[0], player.isPaused))
+        replyMsg(buildMessage(player))
+    }
+
+    fun buildMessage(player: dev.arbjerg.ukulele.audio.Player): MessageCreateData {
+        val track = player.tracks.first()
+        return MessageCreateBuilder()
+            .addEmbeds(buildEmbed(track, player.buildSessionSummary()))
+            .addComponents(listOf(ActionRow.of(playbackButtons(player.isPaused))))
+            .build()
     }
 
     fun buildMessage(track: AudioTrack, isPaused: Boolean): MessageCreateData {
         return MessageCreateBuilder()
-            .addEmbeds(buildEmbed(track))
+            .addEmbeds(buildEmbed(track, null))
             .addComponents(listOf(ActionRow.of(playbackButtons(isPaused))))
             .build()
     }
 
-    fun buildEmbed(track: AudioTrack): MessageEmbed {
+    fun buildEmbed(track: AudioTrack, sessionSummary: String? = null): MessageEmbed {
         return when(track){
-            is YoutubeAudioTrack -> GetEmbed(track).youtube()
-            is SoundCloudAudioTrack -> GetEmbed(track).soundcloud()
-            is TwitchStreamAudioTrack -> GetEmbed(track).twitch()
-            else -> GetEmbed(track).default()
+            is YoutubeAudioTrack -> GetEmbed(track, sessionSummary).youtube()
+            is SoundCloudAudioTrack -> GetEmbed(track, sessionSummary).soundcloud()
+            is TwitchStreamAudioTrack -> GetEmbed(track, sessionSummary).twitch()
+            else -> GetEmbed(track, sessionSummary).default()
         }
     }
 
-    private class GetEmbed(val track: AudioTrack) {
+    private class GetEmbed(val track: AudioTrack, val sessionSummary: String?) {
         val timeField = if (track.info.isStream) "[Live]" else "[${TextUtils.humanReadableTime(track.position)} / ${TextUtils.humanReadableTime(track.info.length)}]"
 
         //Set up common parts of the embed
@@ -55,17 +63,20 @@ class NowPlayingCommand : Command ("nowplaying", "np") {
         fun youtube(): MessageEmbed {
             message.setColor(YOUTUBE_RED)
             message.addField("Time", timeField, true)
+            addSession()
             return message.build()
         }
 
         fun soundcloud(): MessageEmbed {
             message.setColor(SOUNDCLOUD_ORANGE)
             message.addField("Time", timeField, true)
+            addSession()
             return message.build()
         }
 
         fun twitch(): MessageEmbed {
             message.setColor(TWITCH_PURPLE)
+            addSession()
             return message.build()
         }
 
@@ -73,7 +84,12 @@ class NowPlayingCommand : Command ("nowplaying", "np") {
             message.setTitle(track.info.title)  // Show just the title of the radio station. Weird uri jank.
             message.setColor(DEFAULT_GREY)
             message.addField("Time", timeField, true)
+            addSession()
             return message.build()
+        }
+
+        private fun addSession() {
+            if (!sessionSummary.isNullOrBlank()) message.addField("Session", sessionSummary, false)
         }
     }
 
@@ -82,7 +98,7 @@ class NowPlayingCommand : Command ("nowplaying", "np") {
         addDescription("Displays information about the currently playing song.")
     }
 
-    private companion object {
+    companion object {
         fun playbackButtons(isPaused: Boolean): List<Button> {
             val pauseOrResume = if (isPaused) {
                 Button.success("ukulele:resume", "Resume")
@@ -92,7 +108,9 @@ class NowPlayingCommand : Command ("nowplaying", "np") {
 
             return listOf(
                 pauseOrResume,
-                Button.primary("ukulele:skip", "Skip")
+                Button.primary("ukulele:skip", "Skip"),
+                Button.danger("ukulele:stop", "Stop"),
+                Button.secondary("ukulele:queue:1", "Queue")
             )
         }
 

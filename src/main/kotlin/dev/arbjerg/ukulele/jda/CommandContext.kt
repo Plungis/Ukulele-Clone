@@ -10,7 +10,9 @@ import net.dv8tion.jda.api.entities.Member
 import net.dv8tion.jda.api.entities.Message
 import net.dv8tion.jda.api.entities.MessageEmbed
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel
+import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent
 import net.dv8tion.jda.api.utils.messages.MessageCreateData
+import net.dv8tion.jda.api.utils.messages.MessageEditBuilder
 import org.springframework.stereotype.Component
 
 class CommandContext(
@@ -19,11 +21,13 @@ class CommandContext(
     val guild: Guild,
     val channel: TextChannel,
     val invoker: Member,
-    val message: Message,
+    val message: Message?,
     val command: Command,
     val prefix: String,
     /** Prefix + command name */
-        val trigger: String
+        val trigger: String,
+    private val slashEvent: SlashCommandInteractionEvent? = null,
+    private val slashArgumentText: String? = null
 ) {
     @Component
     class Beans(
@@ -37,30 +41,39 @@ class CommandContext(
 
     /** The command argument text after the trigger */
     val argumentText: String by lazy {
-        message.contentRaw.drop(trigger.length).trim()
+        slashArgumentText ?: message?.contentRaw?.drop(trigger.length)?.trim().orEmpty()
     }
     val selfMember: Member get() = guild.selfMember
 
     fun reply(msg: String) {
-        channel.sendMessage(msg).queue()
+        slashEvent?.replyOrFollowUp(MessageCreateData.fromContent(msg)) ?: channel.sendMessage(msg).queue()
     }
 
     fun replyMsg(msg: MessageCreateData) {
-        channel.sendMessage(msg).queue()
+        slashEvent?.replyOrFollowUp(msg) ?: channel.sendMessage(msg).queue()
     }
 
     fun replyEmbed(embed: MessageEmbed) {
-        channel.sendMessage(MessageCreateData.fromEmbeds(embed)).queue()
+        replyMsg(MessageCreateData.fromEmbeds(embed))
     }
 
     fun replyHelp(forCommand: Command = command) {
         val help = HelpContext(this, forCommand)
         forCommand.provideHelp0(help)
-        channel.sendMessage(help.buildMessage()).queue()
+        replyMsg(help.buildMessage())
     }
 
     fun handleException(t: Throwable) {
         command.log.error("Handled exception occurred", t)
         reply("An exception occurred!\n`${t.message}`")
+    }
+
+    private fun SlashCommandInteractionEvent.replyOrFollowUp(message: MessageCreateData) {
+        if (!isAcknowledged) {
+            reply(message).queue()
+            return
+        }
+
+        hook.editOriginal(MessageEditBuilder.fromCreateData(message).build()).queue()
     }
 }

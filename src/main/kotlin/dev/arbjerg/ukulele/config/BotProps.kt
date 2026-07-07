@@ -10,5 +10,11 @@ class BotProps(
         var database: String = "./database",
         var game: String = "",
         var trackDurationLimit: Int = 0,
-        var announceTracks: Boolean = false
+        var announceTracks: Boolean = false,
+        var spotifyClientId: String = "",
+        var spotifyClientSecret: String = "",
+        var spotifySpDc: String = "",
+        var spotifyCountryCode: String = "US",
+        var inactiveDisconnectMinutes: Long = 15,
+        var emptyChannelDisconnectMinutes: Long = 5
 )

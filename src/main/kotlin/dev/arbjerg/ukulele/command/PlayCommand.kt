@@ -100,7 +100,7 @@ class PlayCommand(
         }
 
         override fun noMatches() {
-            ctx.reply("Nothing found for “$identifier”")
+            ctx.reply("Nothing found for \"$identifier\"")
         }
 
         override fun loadFailed(exception: FriendlyException) {
@@ -112,7 +112,7 @@ class PlayCommand(
     }
 
     override fun HelpContext.provideHelp() {
-        addUsage("<url>")
-        addDescription("Add the given track to the queue")
+        addUsage("<url or search>")
+        addDescription("Add a YouTube URL, Spotify URL, or YouTube search result to the queue")
     }
 }

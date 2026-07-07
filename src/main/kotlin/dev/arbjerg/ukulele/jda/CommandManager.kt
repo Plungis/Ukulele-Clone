@@ -4,10 +4,15 @@ import dev.arbjerg.ukulele.config.BotProps
 import dev.arbjerg.ukulele.data.GuildPropertiesService
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
+import net.dv8tion.jda.api.JDA
 import net.dv8tion.jda.api.entities.Guild
 import net.dv8tion.jda.api.entities.Member
 import net.dv8tion.jda.api.entities.Message
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel
+import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent
+import net.dv8tion.jda.api.interactions.commands.OptionType
+import net.dv8tion.jda.api.interactions.commands.build.CommandData
+import net.dv8tion.jda.api.interactions.commands.build.Commands
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -38,6 +43,53 @@ class CommandManager(
     operator fun get(commandName: String) = registry[commandName]
 
     fun getCommands() = registry.values.distinct()
+
+    fun registerSlashCommands(jda: JDA) {
+        jda.updateCommands().addCommands(slashCommands()).queue {
+            log.info("Registered ${it.size} global slash commands")
+        }
+    }
+
+    fun onSlashCommand(event: SlashCommandInteractionEvent) {
+        if (event.guild == null || event.member == null || event.channelType != net.dv8tion.jda.api.entities.channel.ChannelType.TEXT) {
+            event.reply("Music slash commands can only be used in a server text channel.").setEphemeral(true).queue()
+            return
+        }
+
+        val command = registry[event.name] ?: return
+        event.deferReply().queue()
+
+        GlobalScope.launch {
+            val guild = event.guild!!
+            val channel = event.channel.asTextChannel()
+            val guildProperties = guildProperties.getAwait(guild.idLong)
+
+            if (!command.bypassMusicChannelRestriction) {
+                val musicChannelId = guildProperties.musicChannelId
+                if (musicChannelId != null && channel.idLong != musicChannelId) {
+                    event.hook.editOriginal("Music commands are restricted to <#$musicChannelId>.").queue()
+                    return@launch
+                }
+            }
+
+            val ctx = CommandContext(
+                contextBeans,
+                guildProperties,
+                guild,
+                channel,
+                event.member!!,
+                null,
+                command,
+                botProps.prefix,
+                "/${event.name}",
+                event,
+                slashArgumentText(event)
+            )
+
+            log.info("Slash invocation: /${event.name}")
+            command.invoke0(ctx)
+        }
+    }
 
     fun onMessage(guild: Guild, channel: TextChannel, member: Member, message: Message) {
         GlobalScope.launch {
@@ -81,6 +133,40 @@ class CommandManager(
 
             log.info("Invocation: ${message.contentRaw}")
             command.invoke0(ctx)
+        }
+    }
+
+    private fun slashCommands(): List<CommandData> {
+        return listOf(
+            Commands.slash("play", "Play a YouTube or Spotify URL, or search YouTube.")
+                .addOption(OptionType.STRING, "query", "URL or search terms", true),
+            Commands.slash("pause", "Pause playback."),
+            Commands.slash("resume", "Resume playback."),
+            Commands.slash("skip", "Skip the current track or a range.")
+                .addOption(OptionType.STRING, "tracks", "Optional track index or range, like 2 or 2 5"),
+            Commands.slash("stop", "Stop playback, clear the queue, and leave voice."),
+            Commands.slash("queue", "Show the queue.")
+                .addOption(OptionType.INTEGER, "page", "Queue page"),
+            Commands.slash("nowplaying", "Show the current track and playback controls."),
+            Commands.slash("controls", "Show the premium player control panel."),
+            Commands.slash("history", "Show recently played tracks and session play time."),
+            Commands.slash("shuffle", "Shuffle upcoming tracks."),
+            Commands.slash("repeat", "Toggle queue repeat."),
+            Commands.slash("volume", "Show or set the playback volume.")
+                .addOption(OptionType.INTEGER, "level", "Volume percentage from 0 to 150"),
+            Commands.slash("seek", "Seek the current track.")
+                .addOption(OptionType.STRING, "position", "Timestamp like 1:23 or 01:02:03", true)
+        )
+    }
+
+    private fun slashArgumentText(event: SlashCommandInteractionEvent): String {
+        return when (event.name) {
+            "play" -> event.getOption("query")?.asString.orEmpty()
+            "skip" -> event.getOption("tracks")?.asString.orEmpty()
+            "queue" -> event.getOption("page")?.asLong?.toString().orEmpty()
+            "volume" -> event.getOption("level")?.asLong?.toString().orEmpty()
+            "seek" -> event.getOption("position")?.asString.orEmpty()
+            else -> ""
         }
     }
 

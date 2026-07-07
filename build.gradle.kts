@@ -21,6 +21,7 @@ repositories {
     flatDir {
         dirs("lib")
     }
+    maven { url = uri("https://maven.topi.wtf/releases") }
     maven { url = uri("https://maven.lavalink.dev/releases") }
 }
 
@@ -33,6 +34,7 @@ dependencies {
     runtimeOnly("club.minnced:jdave-native-win-x86-64:0.1.8")
     implementation("dev.arbjerg:lavaplayer:2.2.6")
     implementation("dev.lavalink.youtube:v2:1.18.1")
+    implementation("com.github.topi314.lavasrc:lavasrc:4.8.3")
     implementation("org.springframework.boot:spring-boot-starter-data-r2dbc")
 
     runtimeOnly("com.h2database:h2")

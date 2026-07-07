@@ -12,15 +12,19 @@ import dev.arbjerg.ukulele.config.BotProps
 import dev.arbjerg.ukulele.data.GuildProperties
 import dev.arbjerg.ukulele.data.GuildPropertiesService
 import net.dv8tion.jda.api.audio.AudioSendHandler
+import net.dv8tion.jda.api.entities.Guild
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.nio.Buffer
 import java.nio.ByteBuffer
+import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledFuture
+import java.util.concurrent.TimeUnit
 
 
-class Player(val beans: Beans, guildProperties: GuildProperties) : AudioEventAdapter(), AudioSendHandler {
+class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildProperties) : AudioEventAdapter(), AudioSendHandler {
     @Component
     class Beans(
             val apm: AudioPlayerManager,
@@ -38,6 +42,16 @@ class Player(val beans: Beans, guildProperties: GuildProperties) : AudioEventAda
     private val buffer = ByteBuffer.allocate(1024)
     private val frame: MutableAudioFrame = MutableAudioFrame().apply { setBuffer(buffer) }
     private val log: Logger = LoggerFactory.getLogger(Player::class.java)
+    private val scheduler = Executors.newSingleThreadScheduledExecutor { task ->
+        Thread(task, "ukulele-player-$guildId").apply { isDaemon = true }
+    }
+    private var inactivityDisconnect: ScheduledFuture<*>? = null
+    private var emptyChannelDisconnect: ScheduledFuture<*>? = null
+    private var currentTrackStartedAt: Long? = null
+    private var currentTrackPlayedMillis: Long = 0
+    private var sessionPlayedMillis: Long = 0
+    private val playedTracks = ArrayDeque<PlayedTrack>()
+
     var volume: Int
         get() = player.volume
         set(value) {
@@ -63,6 +77,12 @@ class Player(val beans: Beans, guildProperties: GuildProperties) : AudioEventAda
     val isPaused : Boolean
         get() = player.isPaused
 
+    val sessionPlayedDuration: Long
+        get() = sessionPlayedMillis + currentTrackPlaybackMillis()
+
+    val history: List<PlayedTrack>
+        get() = playedTracks.toList()
+
     var isRepeating : Boolean = false
 
     var lastChannel: TextChannel? = null
@@ -72,6 +92,7 @@ class Player(val beans: Beans, guildProperties: GuildProperties) : AudioEventAda
      */
     fun add(vararg tracks: AudioTrack): Boolean {
         queue.add(*tracks)
+        markActive()
         if (player.playingTrack == null) {
             player.playTrack(queue.take()!!)
             return true
@@ -80,6 +101,7 @@ class Player(val beans: Beans, guildProperties: GuildProperties) : AudioEventAda
     }
 
     fun skip(range: IntRange): List<AudioTrack> {
+        markActive()
         val rangeFirst = range.first.coerceAtMost(queue.tracks.size)
         val rangeLast = range.last.coerceAtMost(queue.tracks.size)
         val skipped = mutableListOf<AudioTrack>()
@@ -103,37 +125,74 @@ class Player(val beans: Beans, guildProperties: GuildProperties) : AudioEventAda
     }
 
     fun pause() {
+        pauseElapsedTimer()
         player.isPaused = true
+        scheduleInactivityDisconnect()
     }
 
     fun resume() {
         player.isPaused = false
+        currentTrackStartedAt = System.currentTimeMillis()
+        markActive()
     }
 
     fun shuffle() {
         queue.shuffle()
+        markActive()
     }
 
     fun stop() {
-        queue.clear()
-        player.stopTrack()
+        disconnect("stopped")
     }
 
     fun seek(position: Long) {
         player.playingTrack.position = position
+        markActive()
+    }
+
+    fun onVoiceStateChanged() {
+        if (guild.audioManager.connectedChannel == null) return
+        if (listenersInConnectedChannel() == 0) {
+            scheduleEmptyChannelDisconnect()
+        } else {
+            emptyChannelDisconnect?.cancel(false)
+        }
+    }
+
+    fun buildSessionSummary(): String {
+        val recent = history.takeLast(5).asReversed()
+        return buildString {
+            append("Tracks played: **${history.size}**\n")
+            append("Session play time: **${dev.arbjerg.ukulele.utils.TextUtils.humanReadableTime(sessionPlayedDuration)}**")
+            if (recent.isNotEmpty()) {
+                append("\n\nRecently played:\n")
+                recent.forEach {
+                    append("**${it.title}**")
+                    if (it.author.isNotBlank()) append(" - ${it.author}")
+                    append(" `[${dev.arbjerg.ukulele.utils.TextUtils.humanReadableTime(it.playedMillis)}]`\n")
+                }
+            }
+        }
     }
 
     override fun onTrackStart(player: AudioPlayer, track: AudioTrack) {
+        currentTrackStartedAt = System.currentTimeMillis()
+        currentTrackPlayedMillis = 0
+        markActive()
         if (beans.botProps.announceTracks) {
             lastChannel?.sendMessage(beans.nowPlayingCommand.buildMessage(track, player.isPaused))?.queue()
         }
     }
 
     override fun onTrackEnd(player: AudioPlayer, track: AudioTrack, endReason: AudioTrackEndReason) {
+        recordPlayed(track)
         if (isRepeating && endReason.mayStartNext) {
             queue.add(track.makeClone())
         }
-        val new = queue.take() ?: return
+        val new = queue.take() ?: run {
+            scheduleInactivityDisconnect()
+            return
+        }
         player.playTrack(new)
     }
 
@@ -156,4 +215,80 @@ class Player(val beans: Beans, guildProperties: GuildProperties) : AudioEventAda
     }
 
     override fun isOpus() = true
+
+    private fun markActive() {
+        inactivityDisconnect?.cancel(false)
+        onVoiceStateChanged()
+    }
+
+    private fun scheduleInactivityDisconnect() {
+        inactivityDisconnect?.cancel(false)
+        val delay = beans.botProps.inactiveDisconnectMinutes
+        if (delay <= 0 || !guild.audioManager.isConnected) return
+        inactivityDisconnect = scheduler.schedule({
+            if (player.playingTrack == null || player.isPaused) disconnect("inactive")
+        }, delay, TimeUnit.MINUTES)
+    }
+
+    private fun scheduleEmptyChannelDisconnect() {
+        emptyChannelDisconnect?.cancel(false)
+        val delay = beans.botProps.emptyChannelDisconnectMinutes
+        if (delay <= 0 || !guild.audioManager.isConnected) return
+        emptyChannelDisconnect = scheduler.schedule({
+            if (listenersInConnectedChannel() == 0) disconnect("empty voice channel")
+        }, delay, TimeUnit.MINUTES)
+    }
+
+    private fun disconnect(reason: String) {
+        queue.clear()
+        player.stopTrack()
+        currentTrackStartedAt = null
+        currentTrackPlayedMillis = 0
+        inactivityDisconnect?.cancel(false)
+        emptyChannelDisconnect?.cancel(false)
+        if (guild.audioManager.isConnected) {
+            guild.audioManager.closeAudioConnection()
+            log.info("Disconnected player for guild {}: {}", guildId, reason)
+        }
+    }
+
+    private fun listenersInConnectedChannel(): Int {
+        val channel = guild.audioManager.connectedChannel ?: return 0
+        return channel.members.count { !it.user.isBot }
+    }
+
+    private fun recordPlayed(track: AudioTrack) {
+        pauseElapsedTimer()
+        val playedMillis = if (track.info.isStream) currentTrackPlayedMillis else track.position.coerceAtLeast(currentTrackPlayedMillis)
+        sessionPlayedMillis += playedMillis
+        currentTrackStartedAt = null
+        currentTrackPlayedMillis = 0
+        playedTracks.addLast(PlayedTrack(track.info.title, track.info.author, track.info.uri, playedMillis))
+        while (playedTracks.size > MAX_HISTORY) playedTracks.removeFirst()
+    }
+
+    private fun currentTrackPlaybackMillis(): Long {
+        return currentTrackPlayedMillis + currentTrackElapsed()
+    }
+
+    private fun pauseElapsedTimer() {
+        currentTrackPlayedMillis += currentTrackElapsed()
+        currentTrackStartedAt = null
+    }
+
+    private fun currentTrackElapsed(): Long {
+        val startedAt = currentTrackStartedAt ?: return 0
+        return (System.currentTimeMillis() - startedAt).coerceAtLeast(0)
+    }
+
+    data class PlayedTrack(
+        val title: String,
+        val author: String,
+        val uri: String,
+        val playedMillis: Long
+    )
+
+    private companion object {
+        const val MAX_HISTORY = 25
+    }
 }
