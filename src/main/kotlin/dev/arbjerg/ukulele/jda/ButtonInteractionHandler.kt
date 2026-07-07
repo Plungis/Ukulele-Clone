@@ -75,6 +75,7 @@ class ButtonInteractionHandler(
 
             val player = players.get(guild, guildProperties)
             when (event.values.firstOrNull()) {
+                "panel" -> editSelect(event, controlsCommand.buildMessage(player))
                 "nowplaying" -> editSelect(event, nowPlayingMessage(player))
                 "queue" -> editSelect(event, queueCommand.buildMessage(player, 1))
                 "history" -> editSelect(event, historyMessage(player))
@@ -97,7 +98,7 @@ class ButtonInteractionHandler(
         }
 
         player.pause()
-        editNowPlaying(event, player)
+        editControls(event, player)
     }
 
     private fun resume(event: ButtonInteractionEvent, player: Player) {
@@ -107,7 +108,7 @@ class ButtonInteractionHandler(
         }
 
         player.resume()
-        editNowPlaying(event, player)
+        editControls(event, player)
     }
 
     private fun skip(event: ButtonInteractionEvent, player: Player) {
@@ -117,7 +118,7 @@ class ButtonInteractionHandler(
             return
         }
 
-        editNowPlaying(event, player)
+        editControls(event, player)
     }
 
     private fun stop(event: ButtonInteractionEvent, player: Player) {
@@ -127,11 +128,7 @@ class ButtonInteractionHandler(
         }
 
         player.stop()
-        event.editMessage("Player stopped.").setComponents(emptyList()).queue()
-    }
-
-    private fun editNowPlaying(event: ButtonInteractionEvent, player: Player) {
-        event.editMessage(toEditData(nowPlayingMessage(player))).queue()
+        editControls(event, player)
     }
 
     private fun editControls(event: ButtonInteractionEvent, player: Player) {

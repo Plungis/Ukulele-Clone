@@ -8,12 +8,14 @@ import com.sedmelluq.discord.lavaplayer.track.AudioTrack
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackEndReason
 import com.sedmelluq.discord.lavaplayer.track.playback.MutableAudioFrame
 import dev.arbjerg.ukulele.command.NowPlayingCommand
+import dev.arbjerg.ukulele.command.PlayerPanelRenderer
 import dev.arbjerg.ukulele.config.BotProps
 import dev.arbjerg.ukulele.data.GuildProperties
 import dev.arbjerg.ukulele.data.GuildPropertiesService
 import net.dv8tion.jda.api.audio.AudioSendHandler
 import net.dv8tion.jda.api.entities.Guild
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel
+import net.dv8tion.jda.api.utils.messages.MessageEditBuilder
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
@@ -30,6 +32,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
             val apm: AudioPlayerManager,
             val guildProperties: GuildPropertiesService,
             val nowPlayingCommand: NowPlayingCommand,
+            val panelRenderer: PlayerPanelRenderer,
             val botProps: BotProps
     )
 
@@ -86,6 +89,8 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
     var isRepeating : Boolean = false
 
     var lastChannel: TextChannel? = null
+    private var controlsChannel: TextChannel? = null
+    private var controlsMessageId: Long? = null
 
     /**
      * @return whether or not we started playing
@@ -97,6 +102,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
             player.playTrack(queue.take()!!)
             return true
         }
+        showOrUpdateControls()
         return false
     }
 
@@ -115,7 +121,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
             newRange = newRange.first - 1 .. newRange.last - 1
         }
         if (newRange.last >= 0) skipped.addAll(queue.removeRange(newRange))
-        if (skipped.first() == player.playingTrack) {
+        if (skipped.firstOrNull() == player.playingTrack) {
             if(isRepeating){
                 queue.add(player.playingTrack.makeClone())
             }
@@ -128,17 +134,20 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         pauseElapsedTimer()
         player.isPaused = true
         scheduleInactivityDisconnect()
+        showOrUpdateControls()
     }
 
     fun resume() {
         player.isPaused = false
         currentTrackStartedAt = System.currentTimeMillis()
         markActive()
+        showOrUpdateControls()
     }
 
     fun shuffle() {
         queue.shuffle()
         markActive()
+        showOrUpdateControls()
     }
 
     fun stop() {
@@ -148,6 +157,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
     fun seek(position: Long) {
         player.playingTrack.position = position
         markActive()
+        showOrUpdateControls()
     }
 
     fun onVoiceStateChanged() {
@@ -175,10 +185,35 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         }
     }
 
+    fun showOrUpdateControls() {
+        val channel = lastChannel ?: controlsChannel ?: return
+        val message = beans.panelRenderer.build(this)
+        val editData = MessageEditBuilder.fromCreateData(message).build()
+        val messageId = controlsMessageId
+
+        controlsChannel = channel
+        if (messageId == null) {
+            channel.sendMessage(message).queue { sent ->
+                controlsMessageId = sent.idLong
+                controlsChannel = sent.channel.asTextChannel()
+            }
+            return
+        }
+
+        channel.retrieveMessageById(messageId).queue({ existing ->
+            existing.editMessage(editData).queue(null) {
+                sendFreshControls(channel, message)
+            }
+        }, {
+            sendFreshControls(channel, message)
+        })
+    }
+
     override fun onTrackStart(player: AudioPlayer, track: AudioTrack) {
         currentTrackStartedAt = System.currentTimeMillis()
         currentTrackPlayedMillis = 0
         markActive()
+        showOrUpdateControls()
         if (beans.botProps.announceTracks) {
             lastChannel?.sendMessage(beans.nowPlayingCommand.buildMessage(track, player.isPaused))?.queue()
         }
@@ -191,6 +226,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         }
         val new = queue.take() ?: run {
             scheduleInactivityDisconnect()
+            showOrUpdateControls()
             return
         }
         player.playTrack(new)
@@ -249,6 +285,14 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         if (guild.audioManager.isConnected) {
             guild.audioManager.closeAudioConnection()
             log.info("Disconnected player for guild {}: {}", guildId, reason)
+        }
+        showOrUpdateControls()
+    }
+
+    private fun sendFreshControls(channel: TextChannel, message: net.dv8tion.jda.api.utils.messages.MessageCreateData) {
+        channel.sendMessage(message).queue { sent ->
+            controlsMessageId = sent.idLong
+            controlsChannel = sent.channel.asTextChannel()
         }
     }
 

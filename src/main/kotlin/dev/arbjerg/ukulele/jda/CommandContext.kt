@@ -44,6 +44,7 @@ class CommandContext(
         slashArgumentText ?: message?.contentRaw?.drop(trigger.length)?.trim().orEmpty()
     }
     val selfMember: Member get() = guild.selfMember
+    val isSlashCommand: Boolean get() = slashEvent != null
 
     fun reply(msg: String) {
         slashEvent?.replyOrFollowUp(MessageCreateData.fromContent(msg)) ?: channel.sendMessage(msg).queue()
