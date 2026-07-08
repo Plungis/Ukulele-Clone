@@ -53,6 +53,7 @@ class PlayerPanelRenderer {
                 }
             )
             embed.addField("Session", player.sessionStats(), true)
+            addCommands(embed, player)
             return embed.build()
         }
 
@@ -70,6 +71,7 @@ class PlayerPanelRenderer {
         if (next != null) {
             embed.addField("Up next", next.info.title.abbreviate(120), false)
         }
+        addCommands(embed, player)
 
         return embed.build()
     }
@@ -128,6 +130,20 @@ class PlayerPanelRenderer {
 
     private fun Player.sessionStats(): String {
         return "Played: **${history.size}**\nTime: **${TextUtils.humanReadableTime(sessionPlayedDuration)}**"
+    }
+
+    private fun addCommands(embed: EmbedBuilder, player: Player) {
+        val commands = player.recentCommands.takeLast(5).asReversed()
+        if (commands.isEmpty()) {
+            embed.addField("Commands", "No recent commands.", false)
+            return
+        }
+
+        embed.addField(
+            "Commands",
+            commands.joinToString("\n") { "`/${it.commandName}` ${it.detail}" }.abbreviate(1000),
+            false
+        )
     }
 
     private fun AudioTrack.panelColor(): Int {

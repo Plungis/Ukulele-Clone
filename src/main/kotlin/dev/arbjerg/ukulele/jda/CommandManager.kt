@@ -59,7 +59,7 @@ class CommandManager(
         }
 
         val command = registry[event.name] ?: return
-        event.deferReply(event.name == "show" || event.name == "controls").queue()
+        event.deferReply(true).queue()
 
         GlobalScope.launch {
             val guild = event.guild!!

@@ -47,14 +47,29 @@ class CommandContext(
     val isSlashCommand: Boolean get() = slashEvent != null
 
     fun reply(msg: String) {
-        slashEvent?.replyOrFollowUp(MessageCreateData.fromContent(msg)) ?: channel.sendMessage(msg).queue {
-            bumpPersistentControls()
+        val panelPlayer = panelPlayerForChannel()
+        panelPlayer?.addCommandLog(command.name, msg, channel)
+
+        slashEvent?.replyOrFollowUp(MessageCreateData.fromContent(msg)) ?: run {
+            if (panelPlayer == null) {
+                channel.sendMessage(msg).queue {
+                    bumpPersistentControls()
+                }
+            }
         }
     }
 
     fun replyMsg(msg: MessageCreateData) {
-        slashEvent?.replyOrFollowUp(msg) ?: channel.sendMessage(msg).queue {
-            bumpPersistentControls()
+        val panelPlayer = panelPlayerForChannel()
+        val summary = messageSummary(msg)
+        if (summary.isNotBlank()) panelPlayer?.addCommandLog(command.name, summary, channel)
+
+        slashEvent?.replyOrFollowUp(msg) ?: run {
+            if (panelPlayer == null) {
+                channel.sendMessage(msg).queue {
+                    bumpPersistentControls()
+                }
+            }
         }
     }
 
@@ -88,5 +103,21 @@ class CommandContext(
 
     private fun bumpPersistentControls() {
         beans.players.find(guild.idLong)?.bumpPersistentControls(channel)
+    }
+
+    private fun panelPlayerForChannel(): Player? {
+        val existing = beans.players.find(guild.idLong)
+        if (existing?.hasPersistentControlsFor(channel) == true) return existing
+        if (guildProperties.panelChannelId != channel.idLong) return null
+
+        return player.apply { restoreConfiguredPanelChannel() }
+            .takeIf { it.hasPersistentControlsFor(channel) }
+    }
+
+    private fun messageSummary(message: MessageCreateData): String {
+        if (message.content.isNotBlank()) return message.content
+        return message.embeds.firstOrNull()?.let { embed ->
+            listOfNotNull(embed.title, embed.description).joinToString(" - ")
+        }.orEmpty()
     }
 }

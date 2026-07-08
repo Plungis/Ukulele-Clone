@@ -58,6 +58,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
     private var currentTrackPlayedMillis: Long = 0
     private var sessionPlayedMillis: Long = 0
     private val playedTracks = ArrayDeque<PlayedTrack>()
+    private val commandLog = ArrayDeque<CommandLogEntry>()
 
     var volume: Int
         get() = player.volume
@@ -89,6 +90,9 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
 
     val history: List<PlayedTrack>
         get() = playedTracks.toList()
+
+    val recentCommands: List<CommandLogEntry>
+        get() = commandLog.toList()
 
     var isRepeating : Boolean = false
     var isAutoplaying : Boolean = false
@@ -267,6 +271,25 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         }, {
             sendFreshControls(channel, message)
         })
+    }
+
+    fun hasPersistentControlsFor(channel: TextChannel): Boolean {
+        if (!controlsPersistent) restoreConfiguredPanelChannel()
+        return controlsPersistent && controlsChannel?.idLong == channel.idLong
+    }
+
+    fun addCommandLog(commandName: String, detail: String, channel: TextChannel? = null) {
+        val targetChannel = channel ?: controlsChannel ?: lastChannel
+        if (targetChannel != null && !hasPersistentControlsFor(targetChannel)) return
+
+        commandLog.addLast(CommandLogEntry(commandName, detail.compactForPanel()))
+        while (commandLog.size > MAX_COMMAND_LOG) commandLog.removeFirst()
+
+        if (targetChannel != null) {
+            repostPersistentControls(targetChannel)
+        } else {
+            showOrUpdateControls()
+        }
     }
 
     fun enablePersistentControls(channel: TextChannel) {
@@ -453,7 +476,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         beans.apm.loadItem("ytsearch:$query", object : AudioLoadResultHandler {
             override fun trackLoaded(track: AudioTrack) {
                 player.playTrack(track)
-                lastChannel?.sendMessage("Autoplay picked `${track.info.title}`.")?.queue()
+                addCommandLog("autoplay", "Picked `${track.info.title}`.", lastChannel)
             }
 
             override fun playlistLoaded(playlist: AudioPlaylist) {
@@ -516,8 +539,22 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         val playedMillis: Long
     )
 
+    data class CommandLogEntry(
+        val commandName: String,
+        val detail: String
+    )
+
+    private fun String.compactForPanel(): String {
+        return replace("\n", " ")
+            .replace(Regex("\\s+"), " ")
+            .trim()
+            .let { if (it.length <= MAX_COMMAND_DETAIL_LENGTH) it else it.take(MAX_COMMAND_DETAIL_LENGTH - 3) + "..." }
+    }
+
     private companion object {
         const val MAX_HISTORY = 25
+        const val MAX_COMMAND_LOG = 5
+        const val MAX_COMMAND_DETAIL_LENGTH = 140
         const val PANEL_REFRESH_SECONDS = 5L
         const val PANEL_BUMP_DELAY_MILLIS = 750L
     }

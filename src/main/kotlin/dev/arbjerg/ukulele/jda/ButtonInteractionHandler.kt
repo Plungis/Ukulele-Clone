@@ -85,14 +85,17 @@ class ButtonInteractionHandler(
                 "history" -> editSelect(event, historyMessage(player))
                 "shuffle" -> {
                     player.shuffle()
+                    player.addCommandLog("shuffle", "Upcoming queue shuffled.", event.channel.asTextChannel())
                     editSelect(event, controlsCommand.buildMessage(player))
                 }
                 "repeat" -> {
                     player.isRepeating = !player.isRepeating
+                    player.addCommandLog("repeat", "Repeat is now **${if (player.isRepeating) "on" else "off"}**.", event.channel.asTextChannel())
                     editSelect(event, controlsCommand.buildMessage(player))
                 }
                 "clear" -> {
-                    player.clearUpcoming()
+                    val cleared = player.clearUpcoming()
+                    player.addCommandLog("clear", "Cleared **$cleared** upcoming tracks.", event.channel.asTextChannel())
                     editSelect(event, controlsCommand.buildMessage(player))
                 }
             }
@@ -106,11 +109,13 @@ class ButtonInteractionHandler(
         }
 
         player.pause()
+        player.addCommandLog("pause", "Playback paused.", event.channel.asTextChannel())
         editControls(event, player)
     }
 
     private fun autoplay(event: ButtonInteractionEvent, player: Player) {
         player.isAutoplaying = !player.isAutoplaying
+        player.addCommandLog("autoplay", "Autoplay is now **${if (player.isAutoplaying) "on" else "off"}**.", event.channel.asTextChannel())
         player.showOrUpdateControls()
         editControls(event, player)
     }
@@ -122,6 +127,7 @@ class ButtonInteractionHandler(
         }
 
         player.resume()
+        player.addCommandLog("resume", "Playback resumed.", event.channel.asTextChannel())
         editControls(event, player)
     }
 
@@ -132,6 +138,7 @@ class ButtonInteractionHandler(
             return
         }
 
+        player.addCommandLog("skip", "Skipped `${skipped.first().info.title}`.", event.channel.asTextChannel())
         editControls(event, player)
     }
 
@@ -142,6 +149,7 @@ class ButtonInteractionHandler(
         }
 
         player.stop()
+        player.addCommandLog("stop", "Player stopped.", event.channel.asTextChannel())
         editControls(event, player)
     }
 
