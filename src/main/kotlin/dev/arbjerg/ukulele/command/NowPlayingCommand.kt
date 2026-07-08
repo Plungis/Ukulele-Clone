@@ -4,6 +4,8 @@ import com.sedmelluq.discord.lavaplayer.source.soundcloud.SoundCloudAudioTrack
 import com.sedmelluq.discord.lavaplayer.source.twitch.TwitchStreamAudioTrack
 import com.sedmelluq.discord.lavaplayer.source.youtube.YoutubeAudioTrack
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack
+import dev.arbjerg.ukulele.audio.displayTitle
+import dev.arbjerg.ukulele.audio.displayUri
 import dev.arbjerg.ukulele.features.HelpContext
 import dev.arbjerg.ukulele.jda.Command
 import dev.arbjerg.ukulele.jda.CommandContext
@@ -56,7 +58,7 @@ class NowPlayingCommand : Command ("nowplaying", "np") {
 
         //Set up common parts of the embed
         val message = EmbedBuilder()
-                .setTitle(track.info.title, track.info.uri)
+                .setTitle(track.displayTitle, track.displayUri.takeIf { it.isNotBlank() })
                 .setFooter("Source: ${track.sourceManager.sourceName}")
 
         //Prepare embeds for overrides.
@@ -81,7 +83,7 @@ class NowPlayingCommand : Command ("nowplaying", "np") {
         }
 
         fun default(): MessageEmbed {
-            message.setTitle(track.info.title)  // Show just the title of the radio station. Weird uri jank.
+            message.setTitle(track.displayTitle)  // Show just the title of the radio station. Weird uri jank.
             message.setColor(DEFAULT_GREY)
             message.addField("Time", timeField, true)
             addSession()

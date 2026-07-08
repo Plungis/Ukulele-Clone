@@ -3,6 +3,7 @@ package dev.arbjerg.ukulele.command
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack
 import dev.arbjerg.ukulele.audio.Player
 import dev.arbjerg.ukulele.audio.PlayerRegistry
+import dev.arbjerg.ukulele.audio.displayTitle
 import dev.arbjerg.ukulele.features.HelpContext
 import dev.arbjerg.ukulele.jda.Command
 import dev.arbjerg.ukulele.jda.CommandContext
@@ -78,7 +79,7 @@ class QueueCommand(
         val pageEnd = (offset + pageSize).coerceAtMost(tracks.size)
 
         tracks.subList(offset, pageEnd).forEachIndexed { i, t ->
-            appendLine("`[${offset + i + 1}]` **${t.info.title}** `[${if (t.info.isStream) "Live" else TextUtils.humanReadableTime(t.duration)}]`")
+            appendLine("`[${offset + i + 1}]` **${t.displayTitle}** `[${if (t.info.isStream) "Live" else TextUtils.humanReadableTime(t.duration)}]`")
         }
     }
 

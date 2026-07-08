@@ -173,7 +173,22 @@ class CommandManager(
             Commands.slash("volume", "Show or set the playback volume.")
                 .addOption(OptionType.INTEGER, "level", "Volume percentage from 0 to 150"),
             Commands.slash("seek", "Seek the current track.")
-                .addOption(OptionType.STRING, "position", "Timestamp like 1:23 or 01:02:03", true)
+                .addOption(OptionType.STRING, "position", "Timestamp like 1:23 or 01:02:03", true),
+            Commands.slash("tts", "Speak text in your voice channel.")
+                .addOption(OptionType.STRING, "text", "Text to speak", true)
+                .addOptions(
+                    net.dv8tion.jda.api.interactions.commands.build.OptionData(
+                        OptionType.STRING,
+                        "voice",
+                        "TTS voice"
+                    ).addChoices(
+                        net.dv8tion.jda.api.interactions.commands.Command.Choice("Brian", "Brian"),
+                        net.dv8tion.jda.api.interactions.commands.Command.Choice("Amy", "Amy"),
+                        net.dv8tion.jda.api.interactions.commands.Command.Choice("Emma", "Emma"),
+                        net.dv8tion.jda.api.interactions.commands.Command.Choice("Joanna", "Joanna"),
+                        net.dv8tion.jda.api.interactions.commands.Command.Choice("Matthew", "Matthew")
+                    )
+                )
         )
     }
 
@@ -184,6 +199,7 @@ class CommandManager(
             "queue" -> event.getOption("page")?.asLong?.toString().orEmpty()
             "volume" -> event.getOption("level")?.asLong?.toString().orEmpty()
             "seek" -> event.getOption("position")?.asString.orEmpty()
+            "tts" -> event.getOption("text")?.asString.orEmpty()
             "autoplay" -> event.getOption("enabled")?.asBoolean?.toString().orEmpty()
             "remove" -> event.getOption("position")?.asLong?.toString().orEmpty()
             "move" -> {

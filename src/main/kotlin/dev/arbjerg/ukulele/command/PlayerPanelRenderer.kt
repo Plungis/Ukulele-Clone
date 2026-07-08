@@ -5,6 +5,9 @@ import com.sedmelluq.discord.lavaplayer.source.twitch.TwitchStreamAudioTrack
 import com.sedmelluq.discord.lavaplayer.source.youtube.YoutubeAudioTrack
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack
 import dev.arbjerg.ukulele.audio.Player
+import dev.arbjerg.ukulele.audio.displayAuthor
+import dev.arbjerg.ukulele.audio.displayTitle
+import dev.arbjerg.ukulele.audio.displayUri
 import dev.arbjerg.ukulele.utils.TextUtils
 import net.dv8tion.jda.api.EmbedBuilder
 import net.dv8tion.jda.api.components.actionrow.ActionRow
@@ -57,11 +60,11 @@ class PlayerPanelRenderer {
             return embed.build()
         }
 
-        val author = track.info.author.takeIf { it.isNotBlank() && it != "unknown" }
+        val author = track.displayAuthor.takeIf { it.isNotBlank() && it != "unknown" }
         embed.setDescription(buildString {
-            append("**${track.info.title.abbreviate(240)}**")
+            append("**${track.displayTitle.abbreviate(240)}**")
             if (author != null) append("\nby ${author.abbreviate(120)}")
-            if (track.info.uri.isNotBlank()) append("\n${track.info.uri}")
+            if (track.displayUri.isNotBlank()) append("\n${track.displayUri}")
         })
         embed.addField("Progress", progressLine(track), false)
         embed.addField("Queue", queueStats(player), true)
@@ -69,7 +72,7 @@ class PlayerPanelRenderer {
 
         val next = player.tracks.drop(1).firstOrNull()
         if (next != null) {
-            embed.addField("Up next", next.info.title.abbreviate(120), false)
+            embed.addField("Up next", next.displayTitle.abbreviate(120), false)
         }
         addCommands(embed, player)
 

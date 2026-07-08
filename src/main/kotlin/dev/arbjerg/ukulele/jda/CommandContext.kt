@@ -46,6 +46,8 @@ class CommandContext(
     val selfMember: Member get() = guild.selfMember
     val isSlashCommand: Boolean get() = slashEvent != null
 
+    fun slashOption(name: String): String? = slashEvent?.getOption(name)?.asString
+
     fun reply(msg: String) {
         val panelPlayer = panelPlayerForChannel()
         panelPlayer?.addCommandLog(command.name, msg, channel)
