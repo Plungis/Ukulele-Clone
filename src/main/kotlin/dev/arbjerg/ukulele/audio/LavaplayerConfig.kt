@@ -3,6 +3,7 @@ package dev.arbjerg.ukulele.audio
 import com.sedmelluq.discord.lavaplayer.container.MediaContainerRegistry
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager
 import com.sedmelluq.discord.lavaplayer.player.DefaultAudioPlayerManager
+import com.sedmelluq.discord.lavaplayer.source.AudioSourceManagers.registerLocalSource
 import com.sedmelluq.discord.lavaplayer.source.AudioSourceManagers.registerRemoteSources
 import com.github.topi314.lavasrc.mirror.DefaultMirroringAudioTrackResolver
 import com.github.topi314.lavasrc.spotify.SpotifySourceManager
@@ -37,6 +38,7 @@ class LavaplayerConfig {
             MediaContainerRegistry.DEFAULT_REGISTRY,
             com.sedmelluq.discord.lavaplayer.source.youtube.YoutubeAudioSourceManager::class.java
         )
+        registerLocalSource(apm)
 
         return apm
     }

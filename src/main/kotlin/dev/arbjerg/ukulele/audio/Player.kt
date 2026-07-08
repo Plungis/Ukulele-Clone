@@ -23,6 +23,8 @@ import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Component
 import java.nio.Buffer
 import java.nio.ByteBuffer
+import java.nio.file.Files
+import java.nio.file.Path
 import java.util.concurrent.Executors
 import java.util.concurrent.ScheduledFuture
 import java.util.concurrent.TimeUnit
@@ -136,11 +138,12 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         }
         if (newRange.last >= 0) skipped.addAll(queue.removeRange(newRange))
         if (skipped.firstOrNull() == player.playingTrack) {
-            if(isRepeating){
+            if(isRepeating && player.playingTrack?.userData !is TtsTrackMeta){
                 queue.add(player.playingTrack.makeClone())
             }
             player.stopTrack()
         }
+        skipped.filterNot { it == player.playingTrack }.forEach(::cleanupTemporaryTrack)
         return skipped
     }
 
@@ -167,6 +170,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
     }
 
     fun clearUpcoming(): Int {
+        queue.tracks.forEach(::cleanupTemporaryTrack)
         val count = queue.tracks.size
         queue.clear()
         showOrUpdateControls()
@@ -182,6 +186,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
             if (queueIndex !in queue.tracks.indices) return null
             queue.removeAt(queueIndex)
         }
+        if (removed != player.playingTrack) cleanupTemporaryTrack(removed)
         showOrUpdateControls()
         return removed
     }
@@ -350,7 +355,8 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
     override fun onTrackEnd(player: AudioPlayer, track: AudioTrack, endReason: AudioTrackEndReason) {
         controlsRefresh?.cancel(false)
         recordPlayed(track)
-        if (isRepeating && endReason.mayStartNext) {
+        cleanupTemporaryTrack(track)
+        if (isRepeating && endReason.mayStartNext && track.userData !is TtsTrackMeta) {
             queue.add(track.makeClone())
         }
         val new = queue.take() ?: run {
@@ -409,6 +415,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
     }
 
     private fun disconnect(reason: String) {
+        tracks.forEach(::cleanupTemporaryTrack)
         queue.clear()
         player.stopTrack()
         currentTrackStartedAt = null
@@ -516,6 +523,15 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         currentTrackPlayedMillis = 0
         playedTracks.addLast(PlayedTrack(track.info.title, track.info.author, track.info.uri, playedMillis))
         while (playedTracks.size > MAX_HISTORY) playedTracks.removeFirst()
+    }
+
+    private fun cleanupTemporaryTrack(track: AudioTrack?) {
+        val path = (track?.userData as? TtsTrackMeta)?.filePath ?: return
+        runCatching {
+            Files.deleteIfExists(Path.of(path))
+        }.onFailure {
+            log.warn("Failed to delete temporary TTS file {}", path, it)
+        }
     }
 
     private fun currentTrackPlaybackMillis(): Long {

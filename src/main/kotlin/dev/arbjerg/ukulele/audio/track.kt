@@ -10,7 +10,8 @@ open class TrackMeta
 
 data class TtsTrackMeta(
     val text: String,
-    val requestedBy: String
+    val requestedBy: String,
+    val filePath: String? = null
 ) : TrackMeta()
 
 val AudioTrack.displayTitle: String
