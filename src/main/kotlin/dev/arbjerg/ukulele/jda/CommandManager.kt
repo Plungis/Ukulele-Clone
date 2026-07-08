@@ -11,8 +11,10 @@ import net.dv8tion.jda.api.entities.Message
 import net.dv8tion.jda.api.entities.channel.concrete.TextChannel
 import net.dv8tion.jda.api.events.interaction.command.SlashCommandInteractionEvent
 import net.dv8tion.jda.api.interactions.commands.OptionType
+import net.dv8tion.jda.api.interactions.commands.DefaultMemberPermissions
 import net.dv8tion.jda.api.interactions.commands.build.CommandData
 import net.dv8tion.jda.api.interactions.commands.build.Commands
+import net.dv8tion.jda.api.Permission
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
@@ -67,7 +69,7 @@ class CommandManager(
             if (!command.bypassMusicChannelRestriction) {
                 val musicChannelId = guildProperties.musicChannelId
                 if (musicChannelId != null && channel.idLong != musicChannelId) {
-                    event.hook.editOriginal("Music commands are restricted to <#$musicChannelId>.").queue()
+                    event.hook.editOriginal(WrongChannelMessages.pick("<#$musicChannelId>")).queue()
                     return@launch
                 }
             }
@@ -124,7 +126,7 @@ class CommandManager(
                 if (musicChannelId != null && channel.idLong != musicChannelId) {
                     val musicChannel = guild.getTextChannelById(musicChannelId)
                     val channelName = musicChannel?.asMention ?: "<#$musicChannelId>"
-                    channel.sendMessage("Music commands are restricted to $channelName.").queue()
+                    channel.sendMessage(WrongChannelMessages.pick(channelName)).queue()
                     return@launch
                 }
             }
@@ -150,6 +152,10 @@ class CommandManager(
             Commands.slash("nowplaying", "Show the current track and playback controls."),
             Commands.slash("controls", "Show the premium player control panel."),
             Commands.slash("show", "Show the persistent premium player control panel."),
+            Commands.slash("musicchannel", "Restrict music commands to one text channel.")
+                .addOption(OptionType.CHANNEL, "channel", "Text channel to use for music commands")
+                .addOption(OptionType.BOOLEAN, "reset", "Allow music commands in any text channel")
+                .setDefaultPermissions(DefaultMemberPermissions.enabledFor(Permission.MANAGE_SERVER)),
             Commands.slash("history", "Show recently played tracks and session play time."),
             Commands.slash("shuffle", "Shuffle upcoming tracks."),
             Commands.slash("repeat", "Toggle queue repeat."),
@@ -167,6 +173,13 @@ class CommandManager(
             "queue" -> event.getOption("page")?.asLong?.toString().orEmpty()
             "volume" -> event.getOption("level")?.asLong?.toString().orEmpty()
             "seek" -> event.getOption("position")?.asString.orEmpty()
+            "musicchannel" -> {
+                if (event.getOption("reset")?.asBoolean == true) {
+                    "reset"
+                } else {
+                    event.getOption("channel")?.asChannel?.asMention.orEmpty()
+                }
+            }
             else -> ""
         }
     }

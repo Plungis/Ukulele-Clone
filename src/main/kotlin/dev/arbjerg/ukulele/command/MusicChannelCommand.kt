@@ -13,8 +13,8 @@ class MusicChannelCommand(
 ) : Command("musicchannel", "music-channel", "musicroom", bypassMusicChannelRestriction = true) {
 
     override suspend fun CommandContext.invoke() {
-        if (!invoker.hasPermission(Permission.MANAGE_SERVER)) {
-            reply("You need the Manage Server permission to change the music channel.")
+        if (!invoker.hasPermission(Permission.ADMINISTRATOR) && !invoker.hasPermission(Permission.MANAGE_SERVER)) {
+            reply("You need Administrator or Manage Server permission to change the music channel.")
             return
         }
 
