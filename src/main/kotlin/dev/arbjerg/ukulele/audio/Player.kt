@@ -51,6 +51,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
     private var inactivityDisconnect: ScheduledFuture<*>? = null
     private var emptyChannelDisconnect: ScheduledFuture<*>? = null
     private var controlsRefresh: ScheduledFuture<*>? = null
+    private var controlsBump: ScheduledFuture<*>? = null
     private var currentTrackStartedAt: Long? = null
     private var currentTrackPlayedMillis: Long = 0
     private var sessionPlayedMillis: Long = 0
@@ -92,6 +93,10 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
     var lastChannel: TextChannel? = null
     private var controlsChannel: TextChannel? = null
     private var controlsMessageId: Long? = null
+    private var controlsPersistent: Boolean = false
+
+    val isConnected: Boolean
+        get() = guild.audioManager.isConnected
 
     /**
      * @return whether or not we started playing
@@ -212,6 +217,22 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         })
     }
 
+    fun enablePersistentControls(channel: TextChannel) {
+        controlsPersistent = true
+        lastChannel = channel
+        controlsChannel = channel
+        repostControlsNow()
+    }
+
+    fun bumpPersistentControls(channel: TextChannel? = null) {
+        if (!controlsPersistent) return
+        if (channel != null && controlsChannel?.idLong != channel.idLong) return
+        controlsBump?.cancel(false)
+        controlsBump = scheduler.schedule({
+            repostControlsNow()
+        }, PANEL_BUMP_DELAY_MILLIS, TimeUnit.MILLISECONDS)
+    }
+
     override fun onTrackStart(player: AudioPlayer, track: AudioTrack) {
         currentTrackStartedAt = System.currentTimeMillis()
         currentTrackPlayedMillis = 0
@@ -288,6 +309,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         inactivityDisconnect?.cancel(false)
         emptyChannelDisconnect?.cancel(false)
         controlsRefresh?.cancel(false)
+        controlsBump?.cancel(false)
         if (guild.audioManager.isConnected) {
             guild.audioManager.closeAudioConnection()
             log.info("Disconnected player for guild {}: {}", guildId, reason)
@@ -300,6 +322,24 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
             controlsMessageId = sent.idLong
             controlsChannel = sent.channel.asTextChannel()
         }
+    }
+
+    private fun repostControlsNow() {
+        val channel = controlsChannel ?: lastChannel ?: return
+        val message = beans.panelRenderer.build(this)
+        val messageId = controlsMessageId
+
+        controlsChannel = channel
+        if (messageId == null) {
+            sendFreshControls(channel, message)
+            return
+        }
+
+        channel.deleteMessageById(messageId).queue({
+            sendFreshControls(channel, message)
+        }, {
+            sendFreshControls(channel, message)
+        })
     }
 
     private fun scheduleControlsRefresh() {
@@ -353,5 +393,6 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
     private companion object {
         const val MAX_HISTORY = 25
         const val PANEL_REFRESH_SECONDS = 5L
+        const val PANEL_BUMP_DELAY_MILLIS = 750L
     }
 }

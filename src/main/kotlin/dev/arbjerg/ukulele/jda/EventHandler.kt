@@ -28,6 +28,7 @@ class EventHandler(
         if (event.channelType != ChannelType.TEXT) return
 
         commandManager.onMessage(event.guild, event.channel.asTextChannel(), event.member!!, event.message)
+        players.find(event.guild.idLong)?.bumpPersistentControls(event.channel.asTextChannel())
     }
 
     override fun onButtonInteraction(event: ButtonInteractionEvent) {

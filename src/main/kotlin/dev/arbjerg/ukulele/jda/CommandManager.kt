@@ -57,7 +57,7 @@ class CommandManager(
         }
 
         val command = registry[event.name] ?: return
-        event.deferReply().queue()
+        event.deferReply(event.name == "show" || event.name == "controls").queue()
 
         GlobalScope.launch {
             val guild = event.guild!!
@@ -149,6 +149,7 @@ class CommandManager(
                 .addOption(OptionType.INTEGER, "page", "Queue page"),
             Commands.slash("nowplaying", "Show the current track and playback controls."),
             Commands.slash("controls", "Show the premium player control panel."),
+            Commands.slash("show", "Show the persistent premium player control panel."),
             Commands.slash("history", "Show recently played tracks and session play time."),
             Commands.slash("shuffle", "Shuffle upcoming tracks."),
             Commands.slash("repeat", "Toggle queue repeat."),

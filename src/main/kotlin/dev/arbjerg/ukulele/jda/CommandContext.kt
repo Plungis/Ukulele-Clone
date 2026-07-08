@@ -47,11 +47,15 @@ class CommandContext(
     val isSlashCommand: Boolean get() = slashEvent != null
 
     fun reply(msg: String) {
-        slashEvent?.replyOrFollowUp(MessageCreateData.fromContent(msg)) ?: channel.sendMessage(msg).queue()
+        slashEvent?.replyOrFollowUp(MessageCreateData.fromContent(msg)) ?: channel.sendMessage(msg).queue {
+            bumpPersistentControls()
+        }
     }
 
     fun replyMsg(msg: MessageCreateData) {
-        slashEvent?.replyOrFollowUp(msg) ?: channel.sendMessage(msg).queue()
+        slashEvent?.replyOrFollowUp(msg) ?: channel.sendMessage(msg).queue {
+            bumpPersistentControls()
+        }
     }
 
     fun replyEmbed(embed: MessageEmbed) {
@@ -71,10 +75,18 @@ class CommandContext(
 
     private fun SlashCommandInteractionEvent.replyOrFollowUp(message: MessageCreateData) {
         if (!isAcknowledged) {
-            reply(message).queue()
+            reply(message).queue {
+                bumpPersistentControls()
+            }
             return
         }
 
-        hook.editOriginal(MessageEditBuilder.fromCreateData(message).build()).queue()
+        hook.editOriginal(MessageEditBuilder.fromCreateData(message).build()).queue {
+            bumpPersistentControls()
+        }
+    }
+
+    private fun bumpPersistentControls() {
+        beans.players.find(guild.idLong)?.bumpPersistentControls(channel)
     }
 }

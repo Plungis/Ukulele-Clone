@@ -32,13 +32,26 @@ class PlayerPanelRenderer {
     }
 
     fun buildEmbed(player: Player, track: AudioTrack? = player.tracks.firstOrNull()): MessageEmbed {
+        val isIdle = track == null && !player.isConnected
         val embed = EmbedBuilder()
-            .setTitle(if (track == null) "Ukulele Player" else "Now Playing")
+            .setTitle(
+                when {
+                    isIdle -> "Idle"
+                    track == null -> "Ukulele Player"
+                    else -> "Now Playing"
+                }
+            )
             .setColor(track?.panelColor() ?: DEFAULT_BLUE)
             .setFooter("Ukulele player panel")
 
         if (track == null) {
-            embed.setDescription("Nothing is playing right now.")
+            embed.setDescription(
+                if (isIdle) {
+                    "No music is playing and I am not connected to voice."
+                } else {
+                    "Nothing is playing right now."
+                }
+            )
             embed.addField("Session", player.sessionStats(), true)
             return embed.build()
         }
