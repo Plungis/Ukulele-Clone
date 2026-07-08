@@ -84,6 +84,7 @@ class PlayerPanelRenderer {
         return listOf(
             pauseOrResume.withDisabled(!hasTrack),
             Button.primary("ukulele:skip", "Skip").withDisabled(!hasTrack),
+            Button.success("ukulele:autoplay", "Auto ${if (player.isAutoplaying) "On" else "Off"}").withDisabled(!hasTrack && player.tracks.isEmpty()),
             Button.secondary("ukulele:queue:1", "Queue").withDisabled(player.tracks.isEmpty()),
             Button.danger("ukulele:stop", "Stop").withDisabled(player.tracks.isEmpty())
         )
@@ -94,9 +95,11 @@ class PlayerPanelRenderer {
         .addOption("Refresh panel", "panel", "Return to the live player panel")
         .addOption("Now playing", "nowplaying", "Show the current track details")
         .addOption("Queue", "queue", "Show the current queue")
+        .addOption("Lyrics", "lyrics", "Find a lyrics source for the current track")
         .addOption("History", "history", "Show what has played this session")
         .addOption("Shuffle", "shuffle", "Shuffle upcoming tracks")
         .addOption("Repeat", "repeat", "Toggle queue repeat")
+        .addOption("Clear queue", "clear", "Remove all upcoming tracks")
         .build()
         .withDisabled(!enabled)
 
@@ -119,6 +122,7 @@ class PlayerPanelRenderer {
                 append("\nRemaining: **${TextUtils.humanReadableTime(player.remainingDuration)}**")
             }
             append("\nRepeat: **${if (player.isRepeating) "On" else "Off"}**")
+            append("\nAutoplay: **${if (player.isAutoplaying) "On" else "Off"}**")
         }
     }
 

@@ -3,7 +3,9 @@ package dev.arbjerg.ukulele.audio
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayer
 import com.sedmelluq.discord.lavaplayer.player.AudioPlayerManager
 import com.sedmelluq.discord.lavaplayer.player.event.AudioEventAdapter
+import com.sedmelluq.discord.lavaplayer.player.AudioLoadResultHandler
 import com.sedmelluq.discord.lavaplayer.tools.FriendlyException
+import com.sedmelluq.discord.lavaplayer.track.AudioPlaylist
 import com.sedmelluq.discord.lavaplayer.track.AudioTrack
 import com.sedmelluq.discord.lavaplayer.track.AudioTrackEndReason
 import com.sedmelluq.discord.lavaplayer.track.playback.MutableAudioFrame
@@ -89,6 +91,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         get() = playedTracks.toList()
 
     var isRepeating : Boolean = false
+    var isAutoplaying : Boolean = false
 
     var lastChannel: TextChannel? = null
     private var configuredPanelChannelId: Long? = guildProperties.panelChannelId
@@ -157,6 +160,49 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         queue.shuffle()
         markActive()
         showOrUpdateControls()
+    }
+
+    fun clearUpcoming(): Int {
+        val count = queue.tracks.size
+        queue.clear()
+        showOrUpdateControls()
+        return count
+    }
+
+    fun remove(index: Int): AudioTrack? {
+        if (index <= 0) return null
+        val removed = if (index == 1) {
+            skip(0..0).firstOrNull()
+        } else {
+            val queueIndex = index - 2
+            if (queueIndex !in queue.tracks.indices) return null
+            queue.removeAt(queueIndex)
+        }
+        showOrUpdateControls()
+        return removed
+    }
+
+    fun move(from: Int, to: Int): AudioTrack? {
+        val fromIndex = from - 2
+        val toIndex = to - 2
+        if (from <= 1 || to <= 1) return null
+        if (fromIndex !in queue.tracks.indices) return null
+        val moved = queue.move(fromIndex, toIndex)
+        showOrUpdateControls()
+        return moved
+    }
+
+    fun jump(index: Int): AudioTrack? {
+        if (index <= 0) return null
+        if (index == 1) return player.playingTrack
+
+        val queueIndex = index - 2
+        if (queueIndex !in queue.tracks.indices) return null
+        val selected = queue.removeAt(queueIndex)
+        player.playTrack(selected)
+        markActive()
+        showOrUpdateControls()
+        return selected
     }
 
     fun stop() {
@@ -285,6 +331,10 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
             queue.add(track.makeClone())
         }
         val new = queue.take() ?: run {
+            if (isAutoplaying && endReason.mayStartNext) {
+                loadAutoplay(track)
+                return
+            }
             scheduleInactivityDisconnect()
             showOrUpdateControls()
             return
@@ -392,6 +442,42 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
 
             showOrUpdateControls()
         }, PANEL_REFRESH_SECONDS, PANEL_REFRESH_SECONDS, TimeUnit.SECONDS)
+    }
+
+    private fun loadAutoplay(seed: AudioTrack) {
+        val author = seed.info.author.takeIf { it.isNotBlank() && it != "unknown" }.orEmpty()
+        val query = listOf(author, seed.info.title, "similar songs")
+            .filter { it.isNotBlank() }
+            .joinToString(" ")
+
+        beans.apm.loadItem("ytsearch:$query", object : AudioLoadResultHandler {
+            override fun trackLoaded(track: AudioTrack) {
+                player.playTrack(track)
+                lastChannel?.sendMessage("Autoplay picked `${track.info.title}`.")?.queue()
+            }
+
+            override fun playlistLoaded(playlist: AudioPlaylist) {
+                val track = playlist.tracks.firstOrNull { it.info.uri != seed.info.uri }
+                    ?: playlist.tracks.firstOrNull()
+                if (track == null) {
+                    scheduleInactivityDisconnect()
+                    showOrUpdateControls()
+                    return
+                }
+                trackLoaded(track)
+            }
+
+            override fun noMatches() {
+                scheduleInactivityDisconnect()
+                showOrUpdateControls()
+            }
+
+            override fun loadFailed(exception: FriendlyException) {
+                log.warn("Autoplay lookup failed", exception)
+                scheduleInactivityDisconnect()
+                showOrUpdateControls()
+            }
+        })
     }
 
     private fun listenersInConnectedChannel(): Int {

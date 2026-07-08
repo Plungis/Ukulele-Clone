@@ -159,6 +159,17 @@ class CommandManager(
             Commands.slash("history", "Show recently played tracks and session play time."),
             Commands.slash("shuffle", "Shuffle upcoming tracks."),
             Commands.slash("repeat", "Toggle queue repeat."),
+            Commands.slash("autoplay", "Toggle autoplay when the queue ends.")
+                .addOption(OptionType.BOOLEAN, "enabled", "Whether autoplay should be on"),
+            Commands.slash("lyrics", "Find a lyrics source for the current track."),
+            Commands.slash("remove", "Remove a track from the queue.")
+                .addOption(OptionType.INTEGER, "position", "Queue position to remove", true),
+            Commands.slash("move", "Move an upcoming queue track.")
+                .addOption(OptionType.INTEGER, "from", "Current queue position", true)
+                .addOption(OptionType.INTEGER, "to", "New queue position", true),
+            Commands.slash("clear", "Clear upcoming tracks without stopping the current track."),
+            Commands.slash("jump", "Jump to a queued track.")
+                .addOption(OptionType.INTEGER, "position", "Queue position to jump to", true),
             Commands.slash("volume", "Show or set the playback volume.")
                 .addOption(OptionType.INTEGER, "level", "Volume percentage from 0 to 150"),
             Commands.slash("seek", "Seek the current track.")
@@ -173,6 +184,14 @@ class CommandManager(
             "queue" -> event.getOption("page")?.asLong?.toString().orEmpty()
             "volume" -> event.getOption("level")?.asLong?.toString().orEmpty()
             "seek" -> event.getOption("position")?.asString.orEmpty()
+            "autoplay" -> event.getOption("enabled")?.asBoolean?.toString().orEmpty()
+            "remove" -> event.getOption("position")?.asLong?.toString().orEmpty()
+            "move" -> {
+                val from = event.getOption("from")?.asLong?.toString().orEmpty()
+                val to = event.getOption("to")?.asLong?.toString().orEmpty()
+                "$from $to".trim()
+            }
+            "jump" -> event.getOption("position")?.asLong?.toString().orEmpty()
             "musicchannel" -> {
                 if (event.getOption("reset")?.asBoolean == true) {
                     "reset"

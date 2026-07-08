@@ -2,6 +2,7 @@ package dev.arbjerg.ukulele.jda
 
 import dev.arbjerg.ukulele.audio.Player
 import dev.arbjerg.ukulele.audio.PlayerRegistry
+import dev.arbjerg.ukulele.audio.LyricsService
 import dev.arbjerg.ukulele.command.ControlsCommand
 import dev.arbjerg.ukulele.command.NowPlayingCommand
 import dev.arbjerg.ukulele.command.QueueCommand
@@ -23,6 +24,7 @@ import java.awt.Color
 class ButtonInteractionHandler(
     private val guildPropertiesService: GuildPropertiesService,
     private val players: PlayerRegistry,
+    private val lyricsService: LyricsService,
     private val nowPlayingCommand: NowPlayingCommand,
     private val queueCommand: QueueCommand,
     private val controlsCommand: ControlsCommand
@@ -41,7 +43,7 @@ class ButtonInteractionHandler(
             val guildProperties = guildPropertiesService.getAwait(guild.idLong)
             val musicChannelId = guildProperties.musicChannelId
             if (musicChannelId != null && event.channel.idLong != musicChannelId) {
-                event.reply("Music controls are restricted to <#$musicChannelId>.").setEphemeral(true).queue()
+                event.reply(WrongChannelMessages.pick("<#$musicChannelId>")).setEphemeral(true).queue()
                 return@launch
             }
 
@@ -50,6 +52,7 @@ class ButtonInteractionHandler(
                 buttonId == "$BUTTON_PREFIX:pause" -> pause(event, player)
                 buttonId == "$BUTTON_PREFIX:resume" -> resume(event, player)
                 buttonId == "$BUTTON_PREFIX:skip" -> skip(event, player)
+                buttonId == "$BUTTON_PREFIX:autoplay" -> autoplay(event, player)
                 buttonId == "$BUTTON_PREFIX:stop" -> stop(event, player)
                 buttonId == "$BUTTON_PREFIX:refresh" -> editControls(event, player)
                 buttonId.startsWith("$BUTTON_PREFIX:queue:") -> paginateQueue(event, player, buttonId)
@@ -69,7 +72,7 @@ class ButtonInteractionHandler(
             val guildProperties = guildPropertiesService.getAwait(guild.idLong)
             val musicChannelId = guildProperties.musicChannelId
             if (musicChannelId != null && event.channel.idLong != musicChannelId) {
-                event.reply("Music controls are restricted to <#$musicChannelId>.").setEphemeral(true).queue()
+                event.reply(WrongChannelMessages.pick("<#$musicChannelId>")).setEphemeral(true).queue()
                 return@launch
             }
 
@@ -78,6 +81,7 @@ class ButtonInteractionHandler(
                 "panel" -> editSelect(event, controlsCommand.buildMessage(player))
                 "nowplaying" -> editSelect(event, nowPlayingMessage(player))
                 "queue" -> editSelect(event, queueCommand.buildMessage(player, 1))
+                "lyrics" -> lyrics(event, player)
                 "history" -> editSelect(event, historyMessage(player))
                 "shuffle" -> {
                     player.shuffle()
@@ -85,6 +89,10 @@ class ButtonInteractionHandler(
                 }
                 "repeat" -> {
                     player.isRepeating = !player.isRepeating
+                    editSelect(event, controlsCommand.buildMessage(player))
+                }
+                "clear" -> {
+                    player.clearUpcoming()
                     editSelect(event, controlsCommand.buildMessage(player))
                 }
             }
@@ -98,6 +106,12 @@ class ButtonInteractionHandler(
         }
 
         player.pause()
+        editControls(event, player)
+    }
+
+    private fun autoplay(event: ButtonInteractionEvent, player: Player) {
+        player.isAutoplaying = !player.isAutoplaying
+        player.showOrUpdateControls()
         editControls(event, player)
     }
 
@@ -159,6 +173,28 @@ class ButtonInteractionHandler(
             .build()
 
         return MessageCreateData.fromEmbeds(embed)
+    }
+
+    private fun lyrics(event: StringSelectInteractionEvent, player: Player) {
+        val track = player.tracks.firstOrNull()
+        if (track == null) {
+            event.reply("Not playing anything.").setEphemeral(true).queue()
+            return
+        }
+
+        val result = lyricsService.find(track)
+        if (result == null) {
+            event.reply("I couldn't find lyrics for `${track.info.title}`.").setEphemeral(true).queue()
+            return
+        }
+
+        event.replyEmbeds(
+            EmbedBuilder()
+                .setTitle("Lyrics Found", result.url)
+                .setDescription("Found a lyrics source for **${result.trackName}**${if (result.artistName.isBlank()) "" else " by **${result.artistName}**"}.")
+                .setColor(Color(88, 101, 242))
+                .build()
+        ).setEphemeral(true).queue()
     }
 
     private fun toEditData(message: MessageCreateData): MessageEditData {
