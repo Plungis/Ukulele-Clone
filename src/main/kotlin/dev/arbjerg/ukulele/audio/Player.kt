@@ -91,9 +91,10 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
     var isRepeating : Boolean = false
 
     var lastChannel: TextChannel? = null
-    private var controlsChannel: TextChannel? = null
-    private var controlsMessageId: Long? = null
-    private var controlsPersistent: Boolean = false
+    private var configuredPanelChannelId: Long? = guildProperties.panelChannelId
+    private var controlsChannel: TextChannel? = configuredPanelChannelId?.let { guild.getTextChannelById(it) }
+    private var controlsMessageId: Long? = guildProperties.panelMessageId
+    private var controlsPersistent: Boolean = controlsChannel != null
 
     val isConnected: Boolean
         get() = guild.audioManager.isConnected
@@ -200,6 +201,11 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         val messageId = controlsMessageId
 
         controlsChannel = channel
+        if (controlsPersistent && controlsMessageId == null) {
+            repostControlsNow()
+            return
+        }
+
         if (messageId == null) {
             channel.sendMessage(message).queue { sent ->
                 controlsMessageId = sent.idLong
@@ -221,16 +227,44 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         controlsPersistent = true
         lastChannel = channel
         controlsChannel = channel
+        configuredPanelChannelId = channel.idLong
+        beans.guildProperties.transform(guildId) {
+            it.panelChannelId = channel.idLong
+        }.subscribe()
+        repostControlsNow()
+    }
+
+    fun restorePersistentControls(channel: TextChannel) {
+        controlsPersistent = true
+        lastChannel = channel
+        controlsChannel = channel
+    }
+
+    fun repostPersistentControls(channel: TextChannel? = null) {
+        if (channel != null) {
+            lastChannel = channel
+            controlsChannel = channel
+        } else {
+            restoreConfiguredPanelChannel()
+        }
+        if (!controlsPersistent) return
         repostControlsNow()
     }
 
     fun bumpPersistentControls(channel: TextChannel? = null) {
+        if (!controlsPersistent) restoreConfiguredPanelChannel()
         if (!controlsPersistent) return
         if (channel != null && controlsChannel?.idLong != channel.idLong) return
         controlsBump?.cancel(false)
         controlsBump = scheduler.schedule({
             repostControlsNow()
         }, PANEL_BUMP_DELAY_MILLIS, TimeUnit.MILLISECONDS)
+    }
+
+    fun restoreConfiguredPanelChannel() {
+        val panelChannelId = configuredPanelChannelId ?: return
+        val channel = guild.getTextChannelById(panelChannelId) ?: return
+        restorePersistentControls(channel)
     }
 
     override fun onTrackStart(player: AudioPlayer, track: AudioTrack) {
@@ -321,6 +355,12 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         channel.sendMessage(message).queue { sent ->
             controlsMessageId = sent.idLong
             controlsChannel = sent.channel.asTextChannel()
+            if (controlsPersistent) {
+                beans.guildProperties.transform(guildId) {
+                    it.panelChannelId = sent.channel.idLong
+                    it.panelMessageId = sent.idLong
+                }.subscribe()
+            }
         }
     }
 

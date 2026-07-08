@@ -30,7 +30,9 @@ class PlayCommand(
             identifier = "ytsearch:$identifier"
         }
 
-        players.get(guild, guildProperties).lastChannel = channel
+        val guildPlayer = players.get(guild, guildProperties)
+        guildPlayer.lastChannel = channel
+        guildPlayer.repostPersistentControls()
         apm.loadItem(identifier, Loader(this, player, identifier))
     }
 
@@ -80,6 +82,7 @@ class PlayCommand(
             } else {
                 ctx.reply("Added `${track.info.title}`")
             }
+            player.bumpPersistentControls()
         }
 
         override fun playlistLoaded(playlist: AudioPlaylist) {
@@ -100,6 +103,7 @@ class PlayCommand(
                 append("Added `${accepted.size}` tracks from `${playlist.name}`.")
                 if (filteredCount != 0) append(" `$filteredCount` tracks have been ignored because they are over ${botProps.trackDurationLimit} minutes long")
             })
+            player.bumpPersistentControls()
         }
 
         override fun noMatches() {
