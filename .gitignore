@@ -2,6 +2,7 @@
 *.trace.db
 HELP.md
 .gradle
+.kotlin/
 build/
 !gradle/wrapper/gradle-wrapper.jar
 !**/src/main/**/build/

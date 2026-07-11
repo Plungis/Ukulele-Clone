@@ -56,6 +56,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
     private var emptyChannelDisconnect: ScheduledFuture<*>? = null
     private var controlsRefresh: ScheduledFuture<*>? = null
     private var controlsBump: ScheduledFuture<*>? = null
+    private var controlsViewHeld: Boolean = false
     private var currentTrackStartedAt: Long? = null
     private var currentTrackPlayedMillis: Long = 0
     private var sessionPlayedMillis: Long = 0
@@ -249,7 +250,9 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         }
     }
 
-    fun showOrUpdateControls() {
+    fun showOrUpdateControls(force: Boolean = false) {
+        if (controlsViewHeld && !force) return
+
         val channel = lastChannel ?: controlsChannel ?: return
         val message = beans.panelRenderer.build(this)
         val editData = MessageEditBuilder.fromCreateData(message).build()
@@ -291,7 +294,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         while (commandLog.size > MAX_COMMAND_LOG) commandLog.removeFirst()
 
         if (targetChannel != null) {
-            repostPersistentControls(targetChannel)
+            showOrUpdateControls()
         } else {
             showOrUpdateControls()
         }
@@ -299,6 +302,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
 
     fun enablePersistentControls(channel: TextChannel) {
         controlsPersistent = true
+        controlsViewHeld = false
         lastChannel = channel
         controlsChannel = channel
         configuredPanelChannelId = channel.idLong
@@ -315,6 +319,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
     }
 
     fun repostPersistentControls(channel: TextChannel? = null) {
+        controlsViewHeld = false
         if (channel != null) {
             lastChannel = channel
             controlsChannel = channel
@@ -331,8 +336,16 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         if (channel != null && controlsChannel?.idLong != channel.idLong) return
         controlsBump?.cancel(false)
         controlsBump = scheduler.schedule({
-            repostControlsNow()
+            showOrUpdateControls()
         }, PANEL_BUMP_DELAY_MILLIS, TimeUnit.MILLISECONDS)
+    }
+
+    fun holdPersistentControlsView() {
+        controlsViewHeld = true
+    }
+
+    fun releasePersistentControlsView() {
+        controlsViewHeld = false
     }
 
     fun restoreConfiguredPanelChannel() {
@@ -346,7 +359,11 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
         currentTrackPlayedMillis = 0
         markActive()
         scheduleControlsRefresh()
-        showOrUpdateControls()
+        if (controlsPersistent) {
+            repostPersistentControls()
+        } else {
+            showOrUpdateControls(force = true)
+        }
         if (beans.botProps.announceTracks) {
             lastChannel?.sendMessage(beans.nowPlayingCommand.buildMessage(track, player.isPaused))?.queue()
         }
@@ -445,6 +462,7 @@ class Player(val beans: Beans, private val guild: Guild, guildProperties: GuildP
     }
 
     private fun repostControlsNow() {
+        controlsViewHeld = false
         val channel = controlsChannel ?: lastChannel ?: return
         val message = beans.panelRenderer.build(this)
         val messageId = controlsMessageId

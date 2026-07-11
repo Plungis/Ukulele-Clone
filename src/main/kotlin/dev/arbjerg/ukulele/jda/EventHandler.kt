@@ -1,9 +1,6 @@
 package dev.arbjerg.ukulele.jda
 
 import dev.arbjerg.ukulele.audio.PlayerRegistry
-import dev.arbjerg.ukulele.data.GuildPropertiesService
-import kotlinx.coroutines.GlobalScope
-import kotlinx.coroutines.launch
 import net.dv8tion.jda.api.entities.channel.ChannelType
 import net.dv8tion.jda.api.events.StatusChangeEvent
 import net.dv8tion.jda.api.events.guild.voice.GuildVoiceUpdateEvent
@@ -21,8 +18,7 @@ import org.springframework.stereotype.Service
 class EventHandler(
     private val commandManager: CommandManager,
     private val buttonInteractionHandler: ButtonInteractionHandler,
-    private val players: PlayerRegistry,
-    private val guildPropertiesService: GuildPropertiesService
+    private val players: PlayerRegistry
 ) : ListenerAdapter() {
 
     private val log: Logger = LoggerFactory.getLogger(EventHandler::class.java)
@@ -32,14 +28,6 @@ class EventHandler(
         if (event.channelType != ChannelType.TEXT) return
 
         commandManager.onMessage(event.guild, event.channel.asTextChannel(), event.member!!, event.message)
-        GlobalScope.launch {
-            val guildProperties = guildPropertiesService.getAwait(event.guild.idLong)
-            if (guildProperties.panelChannelId == event.channel.idLong) {
-                players.get(event.guild, guildProperties).bumpPersistentControls(event.channel.asTextChannel())
-            } else {
-                players.find(event.guild.idLong)?.bumpPersistentControls(event.channel.asTextChannel())
-            }
-        }
     }
 
     override fun onButtonInteraction(event: ButtonInteractionEvent) {

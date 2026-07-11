@@ -31,7 +31,6 @@ class PlayCommand(
 
         val guildPlayer = players.get(guild, guildProperties)
         guildPlayer.lastChannel = channel
-        guildPlayer.repostPersistentControls()
         apm.loadItem(identifier, Loader(this, player, identifier))
     }
 

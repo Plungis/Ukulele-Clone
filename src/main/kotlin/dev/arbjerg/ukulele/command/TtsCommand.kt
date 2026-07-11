@@ -52,7 +52,6 @@ class TtsCommand(
         }
         val guildPlayer = players.get(guild, guildProperties)
         guildPlayer.lastChannel = channel
-        guildPlayer.repostPersistentControls()
 
         apm.loadItem(audioFile.toAbsolutePath().toString(), Loader(this, guildPlayer, text, voice, audioFile))
     }

@@ -78,24 +78,30 @@ class ButtonInteractionHandler(
 
             val player = players.get(guild, guildProperties)
             when (event.values.firstOrNull()) {
-                "panel" -> editSelect(event, controlsCommand.buildMessage(player))
-                "nowplaying" -> editSelect(event, nowPlayingMessage(player))
-                "queue" -> editSelect(event, queueCommand.buildMessage(player, 1))
+                "panel" -> {
+                    player.releasePersistentControlsView()
+                    editSelect(event, controlsCommand.buildMessage(player))
+                }
+                "nowplaying" -> editAlternateView(event, player, nowPlayingMessage(player))
+                "queue" -> editAlternateView(event, player, queueCommand.buildMessage(player, 1))
                 "lyrics" -> lyrics(event, player)
-                "history" -> editSelect(event, historyMessage(player))
+                "history" -> editAlternateView(event, player, historyMessage(player))
                 "shuffle" -> {
                     player.shuffle()
                     player.addCommandLog("shuffle", "Upcoming queue shuffled.", event.channel.asTextChannel())
+                    player.releasePersistentControlsView()
                     editSelect(event, controlsCommand.buildMessage(player))
                 }
                 "repeat" -> {
                     player.isRepeating = !player.isRepeating
                     player.addCommandLog("repeat", "Repeat is now **${if (player.isRepeating) "on" else "off"}**.", event.channel.asTextChannel())
+                    player.releasePersistentControlsView()
                     editSelect(event, controlsCommand.buildMessage(player))
                 }
                 "clear" -> {
                     val cleared = player.clearUpcoming()
                     player.addCommandLog("clear", "Cleared **$cleared** upcoming tracks.", event.channel.asTextChannel())
+                    player.releasePersistentControlsView()
                     editSelect(event, controlsCommand.buildMessage(player))
                 }
             }
@@ -154,11 +160,13 @@ class ButtonInteractionHandler(
     }
 
     private fun editControls(event: ButtonInteractionEvent, player: Player) {
+        player.releasePersistentControlsView()
         event.editMessage(toEditData(controlsCommand.buildMessage(player))).queue()
     }
 
     private fun paginateQueue(event: ButtonInteractionEvent, player: Player, buttonId: String) {
         val page = buttonId.substringAfterLast(":").toIntOrNull() ?: 1
+        player.holdPersistentControlsView()
         event.editMessage(toEditData(queueCommand.buildMessage(player, page))).queue()
     }
 
@@ -211,6 +219,11 @@ class ButtonInteractionHandler(
 
     private fun editSelect(event: StringSelectInteractionEvent, message: MessageCreateData) {
         event.editMessage(toEditData(message)).queue()
+    }
+
+    private fun editAlternateView(event: StringSelectInteractionEvent, player: Player, message: MessageCreateData) {
+        player.holdPersistentControlsView()
+        editSelect(event, message)
     }
 
     private companion object {
